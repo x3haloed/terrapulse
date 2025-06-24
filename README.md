@@ -31,7 +31,7 @@ This project is designed to be deployed to a fresh Supabase project and a front-
 The core of TerraPulse is a Postgres database running on Supabase. All game logic is implemented in PL/pgSQL functions. The client is a React application that interacts with the database via the Supabase JS library.
 
 -   **State:** `games`, `players`, `territories`, `orders` tables.
--   **Logic:** `tick()`, `lock_orders()`, `update_ap()` PL/pgSQL functions.
+-   **Logic:** `tick()`, `lock_orders()`, `current_ap()`, `maybe_run_tick()` PL/pgSQL functions.
 -   **Real-time:** `LISTEN/NOTIFY` pushes events to the client via Supabase Realtime.
 -   **Client:** React (Vite) with Zustand for state management.
 
@@ -74,7 +74,8 @@ Browser (React + Vite) ──►  Supabase.JS  ─────────┐
     │                                                       │
     │  PL/pgSQL:                                             │
     │    tick()              -- main resolver                │
-    │    update_ap()         -- AP regen trigger             │
+    │    current_ap()        -- lazy AP check                │
+    │    maybe_run_tick()    -- self-ticking loop            │
     │    lock_orders()       -- RPC for players              │
     │    default_garrison()  -- autodefense helper           │
     │                                                       │
@@ -161,17 +162,16 @@ CREATE POLICY "orders‑own" ON public.orders
 
 ## ⚙️ Core PL/pgSQL Procedures
 
-### `update_ap()` – regen trigger (per‑minute)
+### `current_ap(p_player uuid)` – lazy AP regen
 
 ```sql
-CREATE OR REPLACE FUNCTION public.update_ap() RETURNS void AS $$
-BEGIN
-  UPDATE public.players
-  SET    ap = LEAST(ap_cap, ap + 1)
-  WHERE  game_id IN (SELECT id FROM public.games WHERE status='active');
-END; $$ LANGUAGE plpgsql;
+SELECT public.current_ap(p_player);  -- returns updated Action Points
+```
 
--- call via cron: SELECT public.update_ap();
+### `maybe_run_tick(p_game uuid)` – auto tick if ready
+
+```sql
+SELECT public.maybe_run_tick(p_game);  -- calls tick() when next_tick_at has passed
 ```
 
 ### `lock_orders(p_game uuid, p_player uuid)` – player ready
@@ -242,6 +242,10 @@ await supabase.from('orders').insert({
   cost_ap: 1,
 });
 ```
+
+AP is now refreshed on demand. The `current_ap()` RPC updates a player's AP
+based on elapsed minutes and returns the total. `maybe_run_tick()` checks if a
+game's `next_tick_at` has passed and runs `tick()` when needed.
 
 // New: Ensure lazy AP regeneration and tick triggering via RPCs
 ```ts
