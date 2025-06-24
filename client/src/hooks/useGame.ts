@@ -6,11 +6,11 @@ import { useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useGameStore } from '../store';
 
-export const useGame = (gameId: string) => {
+export const useGame = (gameId: string, playerId: string) => {
   const store = useGameStore();
 
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || !playerId) return;
 
     // Fetch initial state
     const fetchInitialState = async () => {
@@ -29,8 +29,25 @@ export const useGame = (gameId: string) => {
 
     fetchInitialState();
 
+    const fetchOrders = async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('game_id', gameId)
+        .eq('player_id', playerId)
+        .order('created_at', { ascending: true });
+      if (error) {
+        console.error('Error fetching orders:', error);
+      } else {
+        store.setOrders(data);
+      }
+    };
+
+    fetchOrders();
+
     // Subscribe to real-time updates
-    const channel = supabase.channel(`game:${gameId}`)
+    const eventsChannel = supabase
+      .channel(`game:${gameId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -43,10 +60,26 @@ export const useGame = (gameId: string) => {
       })
       .subscribe();
 
+    const ordersChannel = supabase
+      .channel(`orders:${gameId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'orders',
+        filter: `game_id=eq.${gameId}`,
+      }, (payload) => {
+        const newOrder = payload.new;
+        if (newOrder.player_id === playerId) {
+          store.addOrder(newOrder);
+        }
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(eventsChannel);
+      supabase.removeChannel(ordersChannel);
     };
-  }, [gameId, store]);
+  }, [gameId, playerId, store]);
 
   // Expose functions to interact with the game
   const lockOrders = async () => {
