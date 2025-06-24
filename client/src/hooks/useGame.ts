@@ -21,9 +21,14 @@ export const useGame = (gameId: string, playerId: string) => {
 
       if (error) {
         console.error('Error fetching initial state:', error);
-      } else {
-        // Here you would transform the data and update the store
-        console.log('Initial state:', data);
+      } else if (data) {
+        const territories = data.map((row) => ({
+          id: row.territory_id as string,
+          name: row.territory_name as string,
+          owner: (row.owner_name as string) || null,
+          armies: row.armies as number,
+        }));
+        store.setTerritories(territories);
       }
     };
 
