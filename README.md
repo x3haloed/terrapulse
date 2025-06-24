@@ -12,8 +12,6 @@ This project is designed to be deployed to a fresh Supabase project and a front-
 2.  Navigate to **Database -> Extensions** and enable `pg_net` and `pgcrypto`.
 3.  In your local repository, copy the contents of `/supabase/schema.sql` and run it as a new query in the Supabase SQL Editor to create the tables, functions, and policies.
 4.  Copy the contents of `/supabase/seed.sql` and run it as a new query to seed the database with the world map.
-5.  Set up a cron job to regenerate Action Points. Go to **Database -> Functions** and create a new function called `update_ap` with the code from the `update_ap` function in `schema.sql`. Then go to **Database -> Cron Jobs** and create a new job that runs every minute (`* * * * *`) and calls the `update_ap` function.
-6.  Set up a fallback cron job for the main tick. Create another cron job that runs every 5 minutes (`*/5 * * * *`) and calls the `tick` function: `SELECT public.tick();`.
 
 ### 2. Local Development (Client)
 
@@ -94,13 +92,8 @@ Browser (React + Vite) ──►  Supabase.JS  ─────────┐
    * `pg_net`
    * `pgcrypto` (for UUID helpers)
 2. **Auth** → Enable Email (magic link) + GitHub oauth.
-3. **Edge Functions** → *optional* `trigger_tick` function for fast‑forward requests.
-4. **Cron** → Add Scheduled Function:
-
-   ```cron
-   */5 * * * *  SELECT public.tick();  -- fallback every 5 min
-   ```
-5. **Environment Vars (Local)**
+3. **Edge Functions** → *optional* `trigger_tick` function for fast-forward requests.
+4. **Environment Vars (Local)**
 
    ```env
    SUPABASE_URL=https://<project>.supabase.co

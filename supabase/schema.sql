@@ -29,6 +29,8 @@ CREATE TABLE public.players (
   ap_cap       int NOT NULL DEFAULT 24,
   is_locked    bool NOT NULL DEFAULT false,
   capital_id   uuid, -- FK to territories, added later to avoid circular dependency
+  -- Add last_ap_ts for lazy AP regeneration
+  last_ap_ts   timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT uq_player_in_game UNIQUE(game_id, user_id)
 );
 COMMENT ON TABLE public.players IS 'Represents a user''s participation in a single game.';
@@ -168,23 +170,53 @@ LEFT JOIN public.players p ON t.owner_id = p.id;
 -- Functions and Triggers
 --------------------------------------------------------------------------------
 
--- Trigger function to check AP cost before inserting an order
+-- Lazy AP regeneration: current_ap
+CREATE OR REPLACE FUNCTION public.current_ap(p_player uuid)
+RETURNS int AS $$
+DECLARE
+  v_player public.players%ROWTYPE;
+  v_now timestamptz := now();
+  v_delta int;
+BEGIN
+  SELECT * INTO v_player FROM public.players WHERE id = p_player FOR UPDATE;
+  v_delta := FLOOR(EXTRACT(EPOCH FROM (v_now - v_player.last_ap_ts)) / 60); -- minutes
+  IF v_delta > 0 THEN
+    v_player.ap := LEAST(v_player.ap_cap, v_player.ap + v_delta);
+    v_player.last_ap_ts := v_player.last_ap_ts + (v_delta || ' minutes')::interval;
+    UPDATE public.players SET ap = v_player.ap, last_ap_ts = v_player.last_ap_ts WHERE id = p_player;
+  END IF;
+  RETURN v_player.ap;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Self-ticking game loop: maybe_run_tick
+CREATE OR REPLACE FUNCTION public.maybe_run_tick(p_game uuid) RETURNS void AS $$
+DECLARE
+  v_game public.games%ROWTYPE;
+BEGIN
+  SELECT * INTO v_game FROM public.games WHERE id = p_game FOR UPDATE;
+  IF v_game.next_tick_at <= now() THEN
+    PERFORM pg_try_advisory_xact_lock(hashtext(v_game.id::text));
+    IF FOUND THEN
+      PERFORM public.tick(v_game.id);
+    END IF;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Modified trigger: use current_ap for AP cost check
 CREATE OR REPLACE FUNCTION public.check_order_cost()
 RETURNS TRIGGER AS $$
 DECLARE
   current_ap int;
 BEGIN
-  SELECT ap INTO current_ap FROM public.players
-  WHERE id = NEW.player_id;
-
+  SELECT public.current_ap(NEW.player_id) INTO current_ap;
   IF current_ap < NEW.cost_ap THEN
     RAISE EXCEPTION 'Not enough Action Points. Required: %, Available: %', NEW.cost_ap, current_ap;
   END IF;
-
   UPDATE public.players
-  SET ap = ap - NEW.cost_ap
+  SET ap = current_ap - NEW.cost_ap
   WHERE id = NEW.player_id;
-
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -193,48 +225,28 @@ CREATE TRIGGER before_order_insert
   BEFORE INSERT ON public.orders
   FOR EACH ROW EXECUTE FUNCTION public.check_order_cost();
 
+-- Remove per-minute AP regeneration function
+DROP FUNCTION IF EXISTS public.update_ap();
 
--- Per-minute AP regeneration
-CREATE OR REPLACE FUNCTION public.update_ap()
-RETURNS void AS $$
-BEGIN
-  UPDATE public.players
-  SET    ap = LEAST(ap_cap, ap + 1)
-  WHERE  game_id IN (SELECT id FROM public.games WHERE status = 'active');
-END;
-$$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION public.update_ap() IS 'Regenerates 1 AP for all active players, up to their cap. Intended to be called by a cron job every minute.';
-
-
--- RPC for a player to lock their orders
+-- Modified lock_orders: call tick() directly
 CREATE OR REPLACE FUNCTION public.lock_orders(p_game_id uuid)
 RETURNS void AS $$
 DECLARE
   all_locked bool;
 BEGIN
-  -- Set player's status to locked
   UPDATE public.players
   SET is_locked = true
   WHERE game_id = p_game_id AND user_id = auth.uid();
 
-  -- Check if all players in the game are locked
   SELECT bool_and(is_locked) INTO all_locked
   FROM public.players
   WHERE game_id = p_game_id;
 
-  -- If all are locked, trigger the tick immediately
   IF all_locked THEN
-    -- We call tick() as a background worker to avoid blocking the client
-    PERFORM pg_net.http_post(
-        url:='https://<your-project-ref>.supabase.co/functions/v1/tick',
-        headers:='{"Content-Type": "application/json", "Authorization": "Bearer <your-service-role-key>"}'::jsonb,
-        body:=jsonb_build_object('game_id', p_game_id)
-    );
+    PERFORM public.tick(p_game_id);
   END IF;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION public.lock_orders(uuid) IS 'Marks a player as ready for the tick. If all players are ready, it triggers an immediate tick.';
-
 
 -- Auto-garrison for idle players
 CREATE OR REPLACE FUNCTION public.apply_default_garrison(p_game_id uuid)
