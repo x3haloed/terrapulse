@@ -196,8 +196,7 @@ DECLARE
 BEGIN
   SELECT * INTO v_game FROM public.games WHERE id = p_game FOR UPDATE;
   IF v_game.next_tick_at <= now() THEN
-    PERFORM pg_try_advisory_xact_lock(hashtext(v_game.id::text));
-    IF FOUND THEN
+    IF pg_try_advisory_xact_lock(hashtext(v_game.id::text)) THEN
       PERFORM public.tick(v_game.id);
     END IF;
   END IF;
