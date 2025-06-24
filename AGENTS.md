@@ -76,7 +76,7 @@ All other mutations are reserved for server-side logic inside Postgres.
 	•	SQL – Snake_case identifiers; -- for comments; wrap DDL in BEGIN; … COMMIT;.
 	•	TypeScript – ESLint clean; prefer functional components & hooks; state via Zustand.
 	•	Docs – Update README or docs/** when behavior changes; keep this file current.
-	•	Use the Supabase CLI via `npx supabase`; no global install needed.
+	•	Use the Supabase CLI via `npx supabase`; no global install needed. First run will ask to install package, so you can run `yes | npx supabase --version`
 
 ⸻
 
