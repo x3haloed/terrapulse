@@ -19,21 +19,25 @@ export interface Territory {
 }
 
 interface GameState {
-  armies: number
+  ap: number
+  apCap: number
   orders: Order[]
   territories: Territory[]
   setOrders: (orders: Order[]) => void
   addOrder: (order: Order) => void
   setTerritories: (territories: Territory[]) => void
-  increaseArmies: (by: number) => void
+  setAp: (ap: number) => void
+  setApCap: (cap: number) => void
 }
 
 export const useGameStore = create<GameState>()((set) => ({
-  armies: 0,
+  ap: 0,
+  apCap: 0,
   orders: [],
   territories: [],
   setOrders: (orders) => set(() => ({ orders })),
   addOrder: (order) => set((state) => ({ orders: [...state.orders, order] })),
   setTerritories: (territories) => set(() => ({ territories })),
-  increaseArmies: (by) => set((state) => ({ armies: state.armies + by })),
+  setAp: (ap) => set(() => ({ ap })),
+  setApCap: (cap) => set(() => ({ apCap: cap })),
 }))

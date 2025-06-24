@@ -50,6 +50,30 @@ export const useGame = (gameId: string, playerId: string) => {
 
     fetchOrders();
 
+    const fetchAp = async () => {
+      const { data: ap, error: apErr } = await supabase.rpc('current_ap', {
+        p_player: playerId,
+      });
+      if (apErr) {
+        console.error('Error fetching AP:', apErr);
+      } else if (typeof ap === 'number') {
+        store.setAp(ap);
+      }
+
+      const { data: capData, error: capErr } = await supabase
+        .from('players')
+        .select('ap_cap')
+        .eq('id', playerId)
+        .single();
+      if (capErr) {
+        console.error('Error fetching AP cap:', capErr);
+      } else if (capData) {
+        store.setApCap(capData.ap_cap as number);
+      }
+    };
+
+    fetchAp();
+
     // Subscribe to real-time updates
     const eventsChannel = supabase
       .channel(`game:${gameId}`)
@@ -91,6 +115,3 @@ export const useGame = (gameId: string, playerId: string) => {
     const { error } = await supabase.rpc('lock_orders', { p_game_id: gameId });
     if (error) console.error('Error locking orders:', error);
   };
-
-  return { lockOrders };
-}; 
