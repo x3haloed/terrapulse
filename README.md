@@ -1,6 +1,49 @@
 # TerraPulse
 
-A simultaneous‑turn, Risk‑inspired strategy game designed for fully **asynchronous** play.  All persistence **and** core game mechanics run inside Supabase Postgres (Free Tier), driven by `LISTEN/NOTIFY` and the `pg_net` WebSocket extension.  No dedicated game server is required.
+A simultaneous‑turn, Risk‑inspired strategy game designed for fully **asynchronous** play. All persistence **and** core game mechanics run inside Supabase Postgres, driven by `LISTEN/NOTIFY` and the `pg_net` WebSocket extension. No dedicated game server is required.
+
+## 🚀 Getting Started
+
+This project is designed to be deployed to a fresh Supabase project and a front-end hosting service like Vercel or Netlify.
+
+### 1. Supabase Setup
+
+1.  **Create a new Supabase project** on the Free Tier.
+2.  Navigate to **Database -> Extensions** and enable `pg_net` and `pgcrypto`.
+3.  In your local repository, copy the contents of `/supabase/schema.sql` and run it as a new query in the Supabase SQL Editor to create the tables, functions, and policies.
+4.  Copy the contents of `/supabase/seed.sql` and run it as a new query to seed the database with the world map.
+5.  Set up a cron job to regenerate Action Points. Go to **Database -> Functions** and create a new function called `update_ap` with the code from the `update_ap` function in `schema.sql`. Then go to **Database -> Cron Jobs** and create a new job that runs every minute (`* * * * *`) and calls the `update_ap` function.
+6.  Set up a fallback cron job for the main tick. Create another cron job that runs every 5 minutes (`*/5 * * * *`) and calls the `tick` function: `SELECT public.tick();`.
+
+### 2. Local Development (Client)
+
+1.  Navigate to the `client` directory: `cd client`.
+2.  Create a `.env` file by copying `.env.example`.
+3.  Fill in the `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` with the values from your Supabase project's API settings.
+4.  Install dependencies: `npm install`.
+5.  Run the development server: `npm run dev`.
+
+### 3. Important Notes
+
+*   The `lock_orders` function in `supabase/schema.sql` and the `cron-tick.sh` script contain placeholder URLs (`https://<your-project-ref>.supabase.co/...`). You must replace `<your-project-ref>` with your actual Supabase project reference. You will also need to replace `<your-service-role-key>` with your service role key.
+*   The project is a minimal viable product and many features are simplified for this initial version (e.g., battle logic, default garrisons, UI components).
+
+## 🏗️ System Architecture
+
+The core of TerraPulse is a Postgres database running on Supabase. All game logic is implemented in PL/pgSQL functions. The client is a React application that interacts with the database via the Supabase JS library.
+
+-   **State:** `games`, `players`, `territories`, `orders` tables.
+-   **Logic:** `tick()`, `lock_orders()`, `update_ap()` PL/pgSQL functions.
+-   **Real-time:** `LISTEN/NOTIFY` pushes events to the client via Supabase Realtime.
+-   **Client:** React (Vite) with Zustand for state management.
+
+## 🗄️ Database Schema
+
+See `/supabase/schema.sql` for the full DDL, functions, and RLS policies.
+
+## 🖥️ Front-End
+
+The front-end is a React application built with Vite. See the `/client` directory for the source code.
 
 ---
 
@@ -8,25 +51,25 @@ A simultaneous‑turn, Risk‑inspired strategy game designed for fully **asynch
 
 | Area                               | Highlights                                                                                                                            |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Asynchronous Loop**              | Players queue actions whenever they have time; a *pulse* (tick) resolves every 24 h — or instantly if all players have locked orders. |
-| **Action‑Point Economy**           | Each player gets a fixed budget of Action Points (AP) that regenerates every minute.  Prevents grinding while allowing long sessions. |
+| **Asynchronous Loop**              | Players queue actions whenever they have time; a *pulse* (tick) resolves every 24 h — or instantly if all players have locked orders. |
+| **Action‑Point Economy**           | Each player gets a fixed budget of Action Points (AP) that regenerates every minute. Prevents grinding while allowing long sessions. |
 | **Deterministic Server‑Side Dice** | All randomness lives in Postgres (`setseed()` + `random()`), guaranteeing identical replays from DB state alone.                      |
 | **Push Realtime Updates**          | Game events broadcast with `NOTIFY game_evts <json>` → `pg_net` → Supabase Realtime → client subscribe.                               |
 | **Offline Safety**                 | Auto‑garrison orders + defensive bonuses stop midnight wipeouts.                                                                      |
-| **Free‑tier Compatible**           | 500 MB DB, unlimited API, 50k MAU ‑ comfortably runs thousands of concurrent games.                                                   |
+| **Free‑tier Compatible**           | 500 MB DB, unlimited API, 50k MAU ‑ comfortably runs thousands of concurrent games.                                                   |
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture
 
 ```
-Browser (React + Vite) ──►  Supabase.JS  ─────────┐
+Browser (React + Vite) ──►  Supabase.JS  ─────────┐
                                          │ REST
                                          │ RPC
                                    (PostgREST)
                                          ▼
     ┌─────────────────────────────────────────────────────────┐
-    │  Supabase Postgres (DB + logic)                         │
+    │  Supabase Postgres (DB + logic)                         │
     │                                                       │
     │  tables:                                               │
     │    games, players, territories, orders, events         │
@@ -46,16 +89,16 @@ Browser (React + Vite) ──►  Supabase.JS  ─────────┐
 
 ## 🔌  Supabase Setup
 
-1. **Create project** → *Run in Free Tier.*  Under **Database → Extensions** enable:
+1. **Create project** → *Run in Free Tier.*  Under **Database → Extensions** enable:
 
    * `pg_net`
    * `pgcrypto` (for UUID helpers)
-2. **Auth** → Enable Email (magic link) + GitHub oauth.
+2. **Auth** → Enable Email (magic link) + GitHub oauth.
 3. **Edge Functions** → *optional* `trigger_tick` function for fast‑forward requests.
 4. **Cron** → Add Scheduled Function:
 
    ```cron
-   */5 * * * *  SELECT public.tick();  -- fallback every 5 min
+   */5 * * * *  SELECT public.tick();  -- fallback every 5 min
    ```
 5. **Environment Vars (Local)**
 
@@ -161,7 +204,7 @@ BEGIN
 
     -- 2. resolve battles (dice)
     -- 3. move armies / apply reinforcements
-    -- 4. compute AP costs, zero ap
+    -- 4. compute AP costs, zero ap
 
     -- 5. emit NOTIFY
     PERFORM pg_notify('game_evts', json_build_object('game',v_game.id,'tick',now())::text);
@@ -209,7 +252,7 @@ await supabase.from('orders').insert({
 
 ---
 
-## 🚀 Local Dev Workflow
+## 🚀 Local Dev Workflow
 
 ```bash
 # 1. Service startup
@@ -236,7 +279,7 @@ npm run dev           # http://localhost:5173
 
 * **Events table partitioned** by month to keep scans cheap.
 * Use `jsonb_path_ops` GIN indexes on `orders.payload`.
-* Cap event log at 90 days via policy.
+* Cap event log at 90 days via policy.
 
 ---
 
