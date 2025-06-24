@@ -7,7 +7,7 @@ import { supabase } from '../supabase';
 import { useGameStore } from '../store';
 
 export const useGame = (gameId: string) => {
-  const store = useGameStore();
+  const { setTerritories } = useGameStore();
 
   useEffect(() => {
     if (!gameId) return;
@@ -21,9 +21,15 @@ export const useGame = (gameId: string) => {
 
       if (error) {
         console.error('Error fetching initial state:', error);
-      } else {
-        // Here you would transform the data and update the store
-        console.log('Initial state:', data);
+      } else if (data) {
+        setTerritories(
+          data.map((t) => ({
+            id: t.territory_id as string,
+            name: t.territory_name as string,
+            owner: (t.owner_id as string) ?? null,
+            armies: t.armies as number,
+          }))
+        );
       }
     };
 
@@ -46,7 +52,7 @@ export const useGame = (gameId: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId, store]);
+  }, [gameId, setTerritories]);
 
   // Expose functions to interact with the game
   const lockOrders = async () => {
