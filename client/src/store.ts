@@ -1,13 +1,15 @@
 import { create } from 'zustand'
 
 interface GameState {
-  // Define state properties here
-  // e.g., territories, players, orders
-  armies: number
-  increaseArmies: (by: number) => void
+  ap: number
+  apCap: number
+  setAp: (ap: number) => void
+  setApCap: (cap: number) => void
 }
 
 export const useGameStore = create<GameState>()((set) => ({
-  armies: 0,
-  increaseArmies: (by) => set((state) => ({ armies: state.armies + by })),
-})) 
+  ap: 0,
+  apCap: 24,
+  setAp: (ap) => set({ ap }),
+  setApCap: (cap) => set({ apCap: cap }),
+}))

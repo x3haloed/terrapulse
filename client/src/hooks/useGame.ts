@@ -2,12 +2,30 @@
 // such as fetching the initial game state, subscribing to real-time updates,
 // and providing functions to interact with the game (e.g., submit orders).
 
-import { useEffect } from 'react';
-import { supabase } from '../supabase';
-import { useGameStore } from '../store';
+import { useEffect } from 'react'
+import { supabase } from '../supabase'
+import { useGameStore } from '../store'
 
-export const useGame = (gameId: string) => {
-  const store = useGameStore();
+export const useGame = (gameId: string, playerId: string) => {
+  const { setAp } = useGameStore()
+
+  // Fetch current Action Points on mount
+  useEffect(() => {
+    if (!playerId) return
+
+    const fetchAp = async () => {
+      const { data, error } = await supabase.rpc('current_ap', {
+        p_player: playerId,
+      })
+      if (error) {
+        console.error('Error fetching current AP:', error)
+      } else if (typeof data === 'number') {
+        setAp(data)
+      }
+    }
+
+    fetchAp()
+  }, [playerId, setAp])
 
   useEffect(() => {
     if (!gameId) return;
@@ -46,7 +64,7 @@ export const useGame = (gameId: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId, store]);
+  }, [gameId]);
 
   // Expose functions to interact with the game
   const lockOrders = async () => {
