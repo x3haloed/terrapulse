@@ -32,7 +32,7 @@ Source of Truth	Everything—rules, state, events—lives in Postgres (schema.sq
 3 — Turn Checklist
 	1.	Think – Review the open GitHub issue / goal for this turn.
 	2.	Plan – Outline the minimum set of changes (code, SQL, docs).
-	3.	Act – Implement; run npm test && supabase db reset locally.
+	3.	Act – Implement; run npm test && npx supabase db reset locally.
 	4.	Verify – Manual sanity check in browser: create game, submit orders, run tick().
 	5.	Commit – Message format:
 
@@ -76,6 +76,7 @@ All other mutations are reserved for server-side logic inside Postgres.
 	•	SQL – Snake_case identifiers; -- for comments; wrap DDL in BEGIN; … COMMIT;.
 	•	TypeScript – ESLint clean; prefer functional components & hooks; state via Zustand.
 	•	Docs – Update README or docs/** when behavior changes; keep this file current.
+	•	Use the Supabase CLI via `npx supabase`; no global install needed.
 
 ⸻
 
