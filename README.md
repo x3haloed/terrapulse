@@ -243,6 +243,21 @@ await supabase.from('orders').insert({
 });
 ```
 
+// New: Ensure lazy AP regeneration and tick triggering via RPCs
+```ts
+// On lobby mount or after auth:
+await supabase.rpc('current_ap', { p_player: userId });
+await supabase.rpc('maybe_run_tick', { p_game: gameId });
+
+// After submitting an order:
+await supabase.rpc('maybe_run_tick', { p_game: gameId });
+
+// Optional: lightweight heartbeat while the lobby is open
+setInterval(() => {
+  supabase.rpc('maybe_run_tick', { p_game: gameId });
+}, 90_000);
+```
+
 ---
 
 ## 🚀 Local Dev Workflow
